@@ -1,6 +1,6 @@
 [project]
 name = "txdefi"
-version = "1.0.11"
+version = "1.0.11-1"
 description = "Tx Defi Framework for building crypto trading software."
 keywords = ["solana", "sdk", "blockchain", "tools"]
 authors = [
