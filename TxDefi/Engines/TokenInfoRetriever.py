@@ -218,63 +218,54 @@ class TokenInfoRetriever:
 
     def get_token_info(self, token_address: str, is_token_bonding = False)->TokenInfo:
         try:
-            #Check Raydium API first
-            ret_token_info = RaydiumTxBuilder.get_token_info(token_address)
+            #Check if it's a Pumpfun Address (Add in other AMM support as needed)
+            #TODO Revisit, getting data from market address may be more efficient
+            top_accounts = self.solana_rpc_api.get_token_largest_accounts(token_address, 5)
 
-            if ret_token_info:
-                #Need to populate vault reserves since the API doesn't give this to us
-                ret_token_info.sol_vault_amount = self.solana_rpc_api.get_account_balance_Amount(ret_token_info.metadata.sol_vault_address)
-                ret_token_info.token_vault_amount = self.solana_rpc_api.get_token_account_balance(ret_token_info.metadata.token_vault_address)
-       
-                return ret_token_info
-            else: #Check if it's a Pumpfun Address (Add in other AMM support as needed)
-                #TODO Revisit, getting data from market address may be more efficient
-                top_accounts = self.solana_rpc_api.get_token_largest_accounts(token_address, 5)
+            for token_account in top_accounts:                    
+                token_vault_owner = self.solana_rpc_api.get_spl_account_owner(token_account.account_address)
+                
+                if not is_token_bonding: #Last resort, expensive so caller should thread this (Pump)
+                    account_info = self.solana_rpc_api.get_account_info(token_vault_owner)
+                    value = account_info.get('value', {})
+                    owner = value.get('owner', "")
+                    data_decoder = self.transaction_decoder.get_instructions_decoder(owner)
+            
+                    if data_decoder:
+                        ret_token_info = None
+                        program = None
+                        decoded_data = data_decoder.decode(value)
 
-                for token_account in top_accounts:                    
-                    token_vault_owner = self.solana_rpc_api.get_spl_account_owner(token_account.account_address)
-                    
-                    if not is_token_bonding: #Last resort, expensive so caller should thread this (Pump)
-                        account_info = self.solana_rpc_api.get_account_info(token_vault_owner)
-                        value = account_info.get('value', {})
-                        owner = value.get('owner', "")
-                        data_decoder = self.transaction_decoder.get_instructions_decoder(owner)
-             
-                        if data_decoder:
-                            ret_token_info = None
-                            program = None
-                            decoded_data = data_decoder.decode(value)
+                        if decoded_data:
+                            ret_token_info : TokenInfo = None
 
-                            if decoded_data:
-                                ret_token_info : TokenInfo = None
+                            if isinstance(decoded_data, BondingCurveData):                             
+                                sol_reserves = Amount.sol_scaled(decoded_data.virtual_sol_reserves)
+                                token_reserves = Amount.tokens_scaled(decoded_data.virtual_token_reserves, 6)
+                                supply = decoded_data.token_total_supply
+                                sol_vault_account = token_vault_owner
+                                creator_address = decoded_data.creator_address
+                                program = SupportedPrograms.PUMPFUN                                
+                            elif isinstance(decoded_data, LiquidityPoolData):
+                                sol_reserves = self.solana_rpc_api.get_token_account_balance(decoded_data.pool_quote_address, 3)
+                                token_reserves = self.solana_rpc_api.get_token_account_balance(decoded_data.pool_base_address, 3)
+                                supply = decoded_data.total_supply  #TODO may need to pull this later
+                                sol_vault_account = decoded_data.pool_quote_address
+                                creator_address = decoded_data.coin_creator_address
+                                program = SupportedPrograms.PUMPFUN_AMM   
 
-                                if isinstance(decoded_data, BondingCurveData):                             
-                                    sol_reserves = Amount.sol_scaled(decoded_data.virtual_sol_reserves)
-                                    token_reserves = Amount.tokens_scaled(decoded_data.virtual_token_reserves, 6)
-                                    supply = decoded_data.token_total_supply
-                                    sol_vault_account = token_vault_owner
-                                    creator_address = decoded_data.creator_address
-                                    program = SupportedPrograms.PUMPFUN                                
-                                elif isinstance(decoded_data, LiquidityPoolData):
-                                    sol_reserves = self.solana_rpc_api.get_token_account_balance(decoded_data.pool_quote_address, 3)
-                                    token_reserves = self.solana_rpc_api.get_token_account_balance(decoded_data.pool_base_address, 3)
-                                    supply = decoded_data.total_supply  #TODO may need to pull this later
-                                    sol_vault_account = decoded_data.pool_quote_address
-                                    creator_address = decoded_data.coin_creator_address
-                                    program = SupportedPrograms.PUMPFUN_AMM   
+                            if program:
+                                ret_token_info = TokenInfo.create(program, token_address, sol_vault_account, token_account.account_address,
+                                                                sol_reserves, token_reserves)
+                                ret_token_info.metadata.market_id = token_vault_owner
+                                ret_token_info.metadata.supply.set_amount2(supply, Value_Type.SCALED)
+                                ret_token_info.metadata.token_program_address = solana_utilites.TOKEN_PROGRAM_ADDRESS
+                                ret_token_info.metadata.creator_address = creator_address
+                                if len(ret_token_info.metadata.inner_metadata_uri) == 0:
+                                    complete_metadata = self.get_complete_metadata(token_address)
+                                    ret_token_info.copy_missing_metadata(complete_metadata)
 
-                                if program:
-                                    ret_token_info = TokenInfo.create(program, token_address, sol_vault_account, token_account.account_address,
-                                                                    sol_reserves, token_reserves)
-                                    ret_token_info.metadata.market_id = token_vault_owner
-                                    ret_token_info.metadata.supply.set_amount2(supply, Value_Type.SCALED)
-                                    ret_token_info.metadata.token_program_address = solana_utilites.TOKEN_PROGRAM_ADDRESS
-                                    ret_token_info.metadata.creator_address = creator_address
-                                    if len(ret_token_info.metadata.inner_metadata_uri) == 0:
-                                        complete_metadata = self.get_complete_metadata(token_address)
-                                        ret_token_info.copy_missing_metadata(complete_metadata)
-
-                                    return ret_token_info
+                                return ret_token_info
         except Exception as e:
             print("TokenInfoRetriever: Issue retrieving token info for " + token_address)           
 

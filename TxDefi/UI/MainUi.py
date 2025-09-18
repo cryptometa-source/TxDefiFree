@@ -322,7 +322,11 @@ class MainUi(threading.Thread):
         self.trades_manager.sweep()
 
     def add_token(self):
-        self.about_window.show_window()
+        #self.toggle_wait_cursor()
+        mint_address = self.token_entry.get()     
+        
+        self.ui_commands_queue.put(LoadSideWidgetCommand(mint_address))
+        self.main_events_queue.put(MarketAlert(mint_address, TradeEventType.NEW_MINT, SupportedPrograms.WATCHER_WALLET))
 
     #Reevaluate
   #def update_widgets(self, trackersList: list, widgetsList: list, gridFrame: ThumbnailGrid):
