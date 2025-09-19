@@ -5,7 +5,7 @@ Complete Install & Setup Guide: https://youtu.be/7ZFy-RH4gPU
 
 Discord FAQ: https://discord.gg/yjnMCBvyBS
 
-Youtube Tutorial: https://youtu.be/E7CvzsFlPmg
+Trading Strategy Validation & UI Overview: https://youtu.be/E7CvzsFlPmg
 
 
 
