@@ -1,5 +1,5 @@
 # TxDefi
-Tx Defi Free Framework for building crypto trading software limited to only Paper trading Pumpfun coins. See the Discord FAQ for details on gaining an official copy of Tx Defi. 
+Tx Defi Free Framework for building crypto trading software limited to only paper trading Pumpfun coins. See the Discord FAQ for details on gaining an official copy of Tx Defi. 
 
 Complete Install & Setup Guide: https://youtu.be/7ZFy-RH4gPU
 
